@@ -8,6 +8,9 @@ public sealed class RocketsApiFactory : WebApplicationFactory<Program>
 {
     public readonly TimeSpan GapTimeout = TimeSpan.FromSeconds(2);
     public readonly TimeSpan SweepInterval = TimeSpan.FromSeconds(1);
+    public readonly TimeSpan ReclaimIdleThreshold = TimeSpan.FromSeconds(1);
+    public readonly string StreamKey = $"rockets:messages:test:{Guid.NewGuid():N}";
+    public readonly string RedisConnectionString = "localhost:6379";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -19,9 +22,10 @@ public sealed class RocketsApiFactory : WebApplicationFactory<Program>
             {
                 ["ConnectionStrings:Rockets"] =
                     "Server=localhost,1433;Database=RocketsTest;User Id=sa;Password=YourStrong!Passw0rd;TrustServerCertificate=True",
-                ["ConnectionStrings:Redis"] = "localhost:6379",
-                ["RocketsStream:StreamKey"] = $"rockets:messages:test:{Guid.NewGuid():N}",
+                ["ConnectionStrings:Redis"] = RedisConnectionString,
+                ["RocketsStream:StreamKey"] = StreamKey,
                 ["RocketsStream:ConsumerGroup"] = "rocket-ingestion-test",
+                ["RocketsStream:ReclaimIdleThreshold"] = ReclaimIdleThreshold.ToString(),
                 ["RocketSequencer:GapTimeout"] = GapTimeout.ToString(),
                 ["RocketSequencer:SweepInterval"] = SweepInterval.ToString()
             });

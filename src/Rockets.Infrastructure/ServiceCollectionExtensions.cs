@@ -33,6 +33,7 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IRocketEventSequencer, SqlRocketEventSequencer>();
         services.AddScoped<IRocketRepository, SqlRocketRepository>();
+        services.AddScoped<IRocketRejectedEventStore, SqlRocketRejectedEventStore>();
         services.AddScoped<RocketIngestionService>();
         services.AddScoped<RocketQueryService>();
         services.AddScoped<RocketMessageGateway>();

@@ -14,6 +14,8 @@ public sealed class RocketsDbContext : DbContext
 
     public DbSet<RocketSnapshotRecord> Rockets => Set<RocketSnapshotRecord>();
 
+    public DbSet<RejectedRocketEventRecord> RejectedRocketEvents => Set<RejectedRocketEventRecord>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<RocketEventRecord>(entity =>
@@ -39,6 +41,15 @@ public sealed class RocketsDbContext : DbContext
             entity.Property(e => e.Type).HasMaxLength(100);
             entity.Property(e => e.Mission).HasMaxLength(100);
             entity.Property(e => e.ExplosionReason).HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<RejectedRocketEventRecord>(entity =>
+        {
+            entity.ToTable("RejectedRocketEvents");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Channel).HasMaxLength(100);
+            entity.Property(e => e.PayloadType).HasMaxLength(50);
+            entity.Property(e => e.Reason).HasMaxLength(500);
         });
     }
 }

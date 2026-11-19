@@ -4,7 +4,7 @@ namespace Rockets.Infrastructure;
 
 public sealed class RocketSnapshotRecord
 {
-    public string Channel { get; set; } = string.Empty;
+    public required string Channel { get; set; }
 
     public RocketStatus Status { get; set; }
 

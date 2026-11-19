@@ -7,13 +7,18 @@ public sealed class RocketIngestionService
     private readonly IRocketEventSequencer _sequencer;
     private readonly IRocketRepository _repository;
     private readonly IRocketChannelLock _channelLock;
+    private readonly IRocketRejectedEventStore _rejectedEventStore;
 
     public RocketIngestionService(
-        IRocketEventSequencer sequencer, IRocketRepository repository, IRocketChannelLock channelLock)
+        IRocketEventSequencer sequencer,
+        IRocketRepository repository,
+        IRocketChannelLock channelLock,
+        IRocketRejectedEventStore rejectedEventStore)
     {
         _sequencer = sequencer;
         _repository = repository;
         _channelLock = channelLock;
+        _rejectedEventStore = rejectedEventStore;
     }
 
     public async Task<Result<Rocket?>> HandleAsync(RocketEvent @event, CancellationToken cancellationToken)
@@ -26,13 +31,13 @@ public sealed class RocketIngestionService
 
         await using (lockHandle)
         {
-            var sequenceResult = await _sequencer.SubmitAsync(@event, cancellationToken);
-            if (sequenceResult.IsFailure)
-            {
-                return Result<Rocket?>.Failure(sequenceResult.Error!);
-            }
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, lockHandle.LockLost);
 
-            return await ApplyReleasedAsync(@event.ChannelId, sequenceResult.Value, cancellationToken);
+            return await _sequencer.SubmitAsync(
+                @event,
+                (released, ct) => ApplyReleasedAsync(@event.ChannelId, released, ct),
+                linkedCts.Token);
         }
     }
 
@@ -46,13 +51,13 @@ public sealed class RocketIngestionService
 
         await using (lockHandle)
         {
-            var sequenceResult = await _sequencer.RecheckAsync(channel, cancellationToken);
-            if (sequenceResult.IsFailure)
-            {
-                return Result<Rocket?>.Failure(sequenceResult.Error!);
-            }
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, lockHandle.LockLost);
 
-            return await ApplyReleasedAsync(channel, sequenceResult.Value, cancellationToken);
+            return await _sequencer.RecheckAsync(
+                channel,
+                (released, ct) => ApplyReleasedAsync(channel, released, ct),
+                linkedCts.Token);
         }
     }
 
@@ -77,13 +82,19 @@ public sealed class RocketIngestionService
             var applyResult = ApplyToAggregate(rocket, released);
             if (applyResult.IsFailure)
             {
-                return Result<Rocket?>.Failure(applyResult.Error!);
+                await _rejectedEventStore.RecordAsync(released, applyResult.Error!, cancellationToken);
+                continue;
             }
 
             rocket = applyResult.Value;
         }
 
-        var saveResult = await _repository.SaveAsync(rocket!, cancellationToken);
+        if (rocket is null)
+        {
+            return Result<Rocket?>.Success(null);
+        }
+
+        var saveResult = await _repository.SaveAsync(rocket, cancellationToken);
         if (saveResult.IsFailure)
         {
             return Result<Rocket?>.Failure(saveResult.Error!);

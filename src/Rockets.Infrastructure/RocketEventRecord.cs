@@ -4,7 +4,7 @@ namespace Rockets.Infrastructure;
 
 public sealed class RocketEventRecord
 {
-    public string Channel { get; set; } = string.Empty;
+    public required string Channel { get; set; }
 
     public int MessageNumber { get; set; }
 
@@ -12,9 +12,9 @@ public sealed class RocketEventRecord
 
     public DateTimeOffset BufferedAt { get; set; }
 
-    public string PayloadType { get; set; } = string.Empty;
+    public required string PayloadType { get; set; }
 
-    public string PayloadJson { get; set; } = string.Empty;
+    public required string PayloadJson { get; set; }
 
     public static RocketEventRecord FromDomain(RocketEvent @event, DateTimeOffset bufferedAt)
     {
@@ -37,7 +37,7 @@ public sealed class RocketEventRecord
 
 public sealed class RocketChannelCursorRecord
 {
-    public string Channel { get; set; } = string.Empty;
+    public required string Channel { get; set; }
 
     public int NextMessageNumber { get; set; }
 }

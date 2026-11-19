@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Microsoft.Extensions.Logging;
 using Rockets.Application;
 using Rockets.Domain;
 using StackExchange.Redis;
@@ -11,13 +12,16 @@ public sealed class RedisRocketMessageConsumer : IRocketMessageConsumer
 
     private readonly IConnectionMultiplexer _redis;
     private readonly RocketsStreamOptions _options;
+    private readonly ILogger<RedisRocketMessageConsumer> _logger;
     private readonly string _consumerName;
     private DateTime _lastReclaimAttempt = DateTime.MinValue;
 
-    public RedisRocketMessageConsumer(IConnectionMultiplexer redis, RocketsStreamOptions options)
+    public RedisRocketMessageConsumer(
+        IConnectionMultiplexer redis, RocketsStreamOptions options, ILogger<RedisRocketMessageConsumer> logger)
     {
         _redis = redis;
         _options = options;
+        _logger = logger;
         _consumerName = $"{Environment.MachineName}-{Environment.ProcessId}";
     }
 
@@ -50,7 +54,11 @@ public sealed class RedisRocketMessageConsumer : IRocketMessageConsumer
 
             foreach (var entry in entries)
             {
-                yield return ToDelivery(entry);
+                var delivery = await TryToDeliveryAsync(db, entry);
+                if (delivery is not null)
+                {
+                    yield return delivery;
+                }
             }
         }
     }
@@ -71,7 +79,37 @@ public sealed class RedisRocketMessageConsumer : IRocketMessageConsumer
             "0-0",
             count: 50);
 
-        return result.ClaimedEntries.Select(ToDelivery).ToList();
+        var deliveries = new List<RocketMessageDelivery>();
+
+        foreach (var entry in result.ClaimedEntries)
+        {
+            var delivery = await TryToDeliveryAsync(db, entry);
+            if (delivery is not null)
+            {
+                deliveries.Add(delivery);
+            }
+        }
+
+        return deliveries;
+    }
+
+    private async Task<RocketMessageDelivery?> TryToDeliveryAsync(IDatabase db, StreamEntry entry)
+    {
+        try
+        {
+            return ToDelivery(entry);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Discarding unparseable entry {EntryId} on stream {StreamKey}; acknowledging so it is not redelivered.",
+                entry.Id, _options.StreamKey);
+
+            await db.StreamAcknowledgeAsync(_options.StreamKey, _options.ConsumerGroup, entry.Id);
+
+            return null;
+        }
     }
 
     private async Task EnsureConsumerGroupAsync(IDatabase db)

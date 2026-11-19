@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using StackExchange.Redis;
 
 namespace Rockets.Api.Tests;
 
@@ -138,6 +139,71 @@ public sealed class RocketsEndToEndTests : IClassFixture<RocketsApiFactory>
         Assert.NotNull(afterRedelivery);
         Assert.Equal(3500, afterRedelivery!.Speed);
         Assert.Equal(2, afterRedelivery.LastMessageNumber);
+    }
+
+    [Fact]
+    public async Task InvalidMessageInsideContiguousBatch_IsSkippedWithoutLosingValidNeighbors()
+    {
+        var channel = NewChannel();
+
+        // #1 and #2 are valid. #3 is an invalid duplicate launch. All three arrive close together
+        // and are released as one contiguous batch by the sequencer.
+        await RocketMessages.PostAsync(_client, channel, 1, DateTimeOffset.UtcNow, "RocketLaunched",
+            new { type = "Falcon-9", launchSpeed = 500, mission = "ARTEMIS" });
+        await RocketMessages.PostAsync(_client, channel, 2, DateTimeOffset.UtcNow, "RocketSpeedIncreased", new { by = 3000 });
+        await RocketMessages.PostAsync(_client, channel, 3, DateTimeOffset.UtcNow, "RocketLaunched",
+            new { type = "Falcon-9", launchSpeed = 999, mission = "ARTEMIS" });
+
+        var rocket = await RocketMessages.WaitForStateAsync(_client, channel, r => r.LastMessageNumber == 2);
+
+        Assert.NotNull(rocket);
+        Assert.Equal(500 + 3000, rocket!.Speed);
+        Assert.Equal("Falcon-9", rocket.Type);
+
+        // A later valid message should still apply on top of the good state, treating the
+        // rejected #3 as a gap it gave up on.
+        await RocketMessages.PostAsync(_client, channel, 4, DateTimeOffset.UtcNow, "RocketSpeedIncreased", new { by = 7 });
+
+        var afterNext = await RocketMessages.WaitForStateAsync(_client, channel, r => r.LastMessageNumber == 4);
+
+        Assert.NotNull(afterNext);
+        Assert.Equal(500 + 3000 + 7, afterNext!.Speed);
+        Assert.True(afterNext.HasSkippedMessages);
+        Assert.Equal(1, afterNext.SkippedMessageCount);
+    }
+
+    [Fact]
+    public async Task MalformedStreamEntry_IsDiscardedWithoutStallingOtherChannels()
+    {
+        using var redis = await ConnectionMultiplexer.ConnectAsync(_factory.RedisConnectionString);
+        var db = redis.GetDatabase();
+
+        // Inject a poison entry directly onto the stream - a non-numeric messageNumber that
+        // will throw inside int.Parse when the consumer tries to deserialize it.
+        await db.StreamAddAsync(_factory.StreamKey, new NameValueEntry[]
+        {
+            new("channel", "poison-channel"),
+            new("messageNumber", "not-a-number"),
+            new("messageTime", DateTimeOffset.UtcNow.ToString("O")),
+            new("payloadType", "RocketLaunched"),
+            new("payloadJson", "{}")
+        });
+
+        // Let the poison entry age past the idle threshold so the periodic reclaim
+        // (autoclaim) path picks it up at least once - that's where an un-isolated parse
+        // failure used to crash the shared consumption loop on every retry, forever.
+        await Task.Delay(TimeSpan.FromSeconds(7));
+
+        // A healthy message on a different channel should still be processed normally -
+        // the poison entry must not crash or stall the shared consumption loop.
+        var channel = NewChannel();
+        await RocketMessages.PostAsync(_client, channel, 1, DateTimeOffset.UtcNow, "RocketLaunched",
+            new { type = "Falcon-9", launchSpeed = 500, mission = "ARTEMIS" });
+
+        var rocket = await RocketMessages.WaitForStateAsync(_client, channel, r => r.LastMessageNumber == 1);
+
+        Assert.NotNull(rocket);
+        Assert.Equal(500, rocket!.Speed);
     }
 
     [Fact]

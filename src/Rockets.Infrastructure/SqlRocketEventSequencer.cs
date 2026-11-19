@@ -19,58 +19,56 @@ public sealed class SqlRocketEventSequencer : IRocketEventSequencer
         _timeProvider = timeProvider;
     }
 
-    public Task<Result<IReadOnlyList<RocketEvent>>> SubmitAsync(
-        RocketEvent @event, CancellationToken cancellationToken)
+    public Task<Result<Rocket?>> SubmitAsync(
+        RocketEvent @event,
+        Func<IReadOnlyList<RocketEvent>, CancellationToken, Task<Result<Rocket?>>> applyReleasedAsync,
+        CancellationToken cancellationToken)
     {
         var strategy = _db.Database.CreateExecutionStrategy();
 
-        return strategy.ExecuteAsync(() => SubmitOnceAsync(@event, cancellationToken));
+        return strategy.ExecuteAsync(() => SubmitOnceAsync(@event, applyReleasedAsync, cancellationToken));
     }
 
-    public Task<Result<IReadOnlyList<RocketEvent>>> RecheckAsync(string channel, CancellationToken cancellationToken)
+    public Task<Result<Rocket?>> RecheckAsync(
+        string channel,
+        Func<IReadOnlyList<RocketEvent>, CancellationToken, Task<Result<Rocket?>>> applyReleasedAsync,
+        CancellationToken cancellationToken)
     {
         var strategy = _db.Database.CreateExecutionStrategy();
 
-        return strategy.ExecuteAsync(() => RecheckOnceAsync(channel, cancellationToken));
+        return strategy.ExecuteAsync(() => RecheckOnceAsync(channel, applyReleasedAsync, cancellationToken));
     }
 
     public async Task<IReadOnlyList<string>> GetStaleChannelsWithBacklogAsync(CancellationToken cancellationToken)
     {
-        var nextMessageNumberByChannel = await _db.RocketChannelCursors.AsNoTracking()
-            .ToDictionaryAsync(c => c.Channel, c => c.NextMessageNumber, cancellationToken);
-
-        var bufferedEvents = await _db.RocketEvents.AsNoTracking()
-            .Select(e => new { e.Channel, e.MessageNumber, e.BufferedAt })
-            .ToListAsync(cancellationToken);
-
         var cutoff = _timeProvider.GetUtcNow() - _options.GapTimeout;
-        var staleChannels = new List<string>();
 
-        foreach (var channelEvents in bufferedEvents.GroupBy(e => e.Channel))
-        {
-            var channel = channelEvents.Key;
-            var nextMessageNumber = nextMessageNumberByChannel.GetValueOrDefault(channel, 1);
-
-            var backlog = channelEvents.Where(e => e.MessageNumber >= nextMessageNumber).ToList();
-            if (backlog.Count == 0)
-            {
-                continue;
-            }
-
-            var latestActivity = backlog.Max(e => e.BufferedAt);
-            var hasGoneQuiet = latestActivity <= cutoff;
-
-            if (hasGoneQuiet)
-            {
-                staleChannels.Add(channel);
-            }
-        }
-
-        return staleChannels;
+        return await _db.RocketEvents.AsNoTracking()
+            .GroupJoin(
+                _db.RocketChannelCursors.AsNoTracking(),
+                rocketEvent => rocketEvent.Channel,
+                cursor => cursor.Channel,
+                (rocketEvent, cursors) => new { rocketEvent, cursors })
+            .SelectMany(
+                x => x.cursors.DefaultIfEmpty(),
+                (x, cursor) => new
+                {
+                    x.rocketEvent.Channel,
+                    x.rocketEvent.MessageNumber,
+                    x.rocketEvent.BufferedAt,
+                    NextMessageNumber = cursor == null ? 1 : cursor.NextMessageNumber
+                })
+            .Where(x => x.MessageNumber >= x.NextMessageNumber)
+            .GroupBy(x => x.Channel)
+            .Where(g => g.Max(x => x.BufferedAt) <= cutoff)
+            .Select(g => g.Key)
+            .ToListAsync(cancellationToken);
     }
 
-    private async Task<Result<IReadOnlyList<RocketEvent>>> SubmitOnceAsync(
-        RocketEvent @event, CancellationToken cancellationToken)
+    private async Task<Result<Rocket?>> SubmitOnceAsync(
+        RocketEvent @event,
+        Func<IReadOnlyList<RocketEvent>, CancellationToken, Task<Result<Rocket?>>> applyReleasedAsync,
+        CancellationToken cancellationToken)
     {
         _db.ChangeTracker.Clear();
 
@@ -82,23 +80,30 @@ public sealed class SqlRocketEventSequencer : IRocketEventSequencer
 
         var nextMessageNumber = cursor?.NextMessageNumber ?? 1;
 
-        if (@event.MessageNumber < nextMessageNumber)
+        IReadOnlyList<RocketEvent> released = Array.Empty<RocketEvent>();
+
+        if (@event.MessageNumber >= nextMessageNumber)
         {
-            await transaction.CommitAsync(cancellationToken);
-            return Result<IReadOnlyList<RocketEvent>>.Success(Array.Empty<RocketEvent>());
+            await BufferAsync(@event, cancellationToken);
+            released = await ReleaseAsync(@event.ChannelId, cursor, nextMessageNumber, cancellationToken);
         }
 
-        await BufferAsync(@event, cancellationToken);
-
-        var released = await ReleaseAsync(@event.ChannelId, cursor, nextMessageNumber, cancellationToken);
+        var applyResult = await applyReleasedAsync(released, cancellationToken);
+        if (applyResult.IsFailure)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return applyResult;
+        }
 
         await transaction.CommitAsync(cancellationToken);
 
-        return Result<IReadOnlyList<RocketEvent>>.Success(released);
+        return applyResult;
     }
 
-    private async Task<Result<IReadOnlyList<RocketEvent>>> RecheckOnceAsync(
-        string channel, CancellationToken cancellationToken)
+    private async Task<Result<Rocket?>> RecheckOnceAsync(
+        string channel,
+        Func<IReadOnlyList<RocketEvent>, CancellationToken, Task<Result<Rocket?>>> applyReleasedAsync,
+        CancellationToken cancellationToken)
     {
         _db.ChangeTracker.Clear();
 
@@ -112,9 +117,16 @@ public sealed class SqlRocketEventSequencer : IRocketEventSequencer
 
         var released = await ReleaseAsync(channel, cursor, nextMessageNumber, cancellationToken);
 
+        var applyResult = await applyReleasedAsync(released, cancellationToken);
+        if (applyResult.IsFailure)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return applyResult;
+        }
+
         await transaction.CommitAsync(cancellationToken);
 
-        return Result<IReadOnlyList<RocketEvent>>.Success(released);
+        return applyResult;
     }
 
     private async Task<IReadOnlyList<RocketEvent>> ReleaseAsync(
@@ -129,6 +141,12 @@ public sealed class SqlRocketEventSequencer : IRocketEventSequencer
 
         if (released.Count > 0)
         {
+            var releasedMessageNumbers = released.Select(e => e.MessageNumber).ToList();
+
+            await _db.RocketEvents
+                .Where(e => e.Channel == channel && releasedMessageNumbers.Contains(e.MessageNumber))
+                .ExecuteDeleteAsync(cancellationToken);
+
             AdvanceCursor(channel, cursor, released[^1].MessageNumber + 1);
             await _db.SaveChangesAsync(cancellationToken);
         }
