@@ -18,16 +18,14 @@ public sealed class SqlRocketRejectedEventStore : IRocketRejectedEventStore
     {
         var (payloadType, payloadJson) = RocketEventPayloadSerializer.Serialize(@event.Payload);
 
-        _db.RejectedRocketEvents.Add(new RejectedRocketEventRecord
-        {
-            Channel = @event.ChannelId,
-            MessageNumber = @event.MessageNumber,
-            MessageTime = @event.MessageTime,
-            PayloadType = payloadType,
-            PayloadJson = payloadJson,
-            Reason = reason,
-            RejectedAt = _timeProvider.GetUtcNow()
-        });
+        _db.RejectedRocketEvents.Add(RejectedRocketEventRecord.Create(
+            @event.ChannelId,
+            @event.MessageNumber,
+            @event.MessageTime,
+            payloadType,
+            payloadJson,
+            reason,
+            _timeProvider.GetUtcNow()));
 
         await _db.SaveChangesAsync(cancellationToken);
     }

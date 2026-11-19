@@ -48,8 +48,12 @@ public sealed class RocketsDbContext : DbContext
             entity.ToTable("RejectedRocketEvents");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Channel).HasMaxLength(100);
+            entity.Property(e => e.MessageNumber);
+            entity.Property(e => e.MessageTime);
             entity.Property(e => e.PayloadType).HasMaxLength(50);
+            entity.Property(e => e.PayloadJson);
             entity.Property(e => e.Reason).HasMaxLength(500);
+            entity.Property(e => e.RejectedAt);
         });
     }
 }

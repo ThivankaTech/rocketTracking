@@ -4,29 +4,33 @@ namespace Rockets.Infrastructure;
 
 public sealed class RocketSnapshotRecord
 {
-    public required string Channel { get; set; }
+    private RocketSnapshotRecord(string channel)
+    {
+        Channel = channel;
+    }
 
-    public RocketStatus Status { get; set; }
+    public string Channel { get; }
 
-    public string? Type { get; set; }
+    public RocketStatus Status { get; private set; }
 
-    public string? Mission { get; set; }
+    public string? Type { get; private set; }
 
-    public int? LaunchSpeed { get; set; }
+    public string? Mission { get; private set; }
 
-    public int Speed { get; set; }
+    public int? LaunchSpeed { get; private set; }
 
-    public string? ExplosionReason { get; set; }
+    public int Speed { get; private set; }
 
-    public int LastMessageNumber { get; set; }
+    public string? ExplosionReason { get; private set; }
 
-    public DateTimeOffset LastMessageTime { get; set; }
+    public int LastMessageNumber { get; private set; }
 
-    public int SkippedMessageCount { get; set; }
+    public DateTimeOffset LastMessageTime { get; private set; }
+
+    public int SkippedMessageCount { get; private set; }
 
     public void CopyFrom(Rocket rocket)
     {
-        Channel = rocket.ChannelId;
         Status = rocket.Status;
         Type = rocket.Type;
         Mission = rocket.Mission;
@@ -36,6 +40,13 @@ public sealed class RocketSnapshotRecord
         LastMessageNumber = rocket.LastMessageNumber;
         LastMessageTime = rocket.LastMessageTime;
         SkippedMessageCount = rocket.SkippedMessageCount;
+    }
+
+    public static RocketSnapshotRecord Create(Rocket rocket)
+    {
+        var snapshot = new RocketSnapshotRecord(rocket.ChannelId);
+        snapshot.CopyFrom(rocket);
+        return snapshot;
     }
 
     public Rocket ToDomain() => Rocket.Restore(

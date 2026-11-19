@@ -2,19 +2,47 @@ namespace Rockets.Infrastructure;
 
 public sealed class RejectedRocketEventRecord
 {
-    public int Id { get; set; }
+    private RejectedRocketEventRecord(
+        string channel,
+        int messageNumber,
+        DateTimeOffset messageTime,
+        string payloadType,
+        string payloadJson,
+        string reason,
+        DateTimeOffset rejectedAt)
+    {
+        Channel = channel;
+        MessageNumber = messageNumber;
+        MessageTime = messageTime;
+        PayloadType = payloadType;
+        PayloadJson = payloadJson;
+        Reason = reason;
+        RejectedAt = rejectedAt;
+    }
 
-    public required string Channel { get; set; }
+    public int Id { get; private set; }
 
-    public int MessageNumber { get; set; }
+    public string Channel { get; }
 
-    public DateTimeOffset MessageTime { get; set; }
+    public int MessageNumber { get; }
 
-    public required string PayloadType { get; set; }
+    public DateTimeOffset MessageTime { get; }
 
-    public required string PayloadJson { get; set; }
+    public string PayloadType { get; }
 
-    public required string Reason { get; set; }
+    public string PayloadJson { get; }
 
-    public DateTimeOffset RejectedAt { get; set; }
+    public string Reason { get; }
+
+    public DateTimeOffset RejectedAt { get; }
+
+    public static RejectedRocketEventRecord Create(
+        string channel,
+        int messageNumber,
+        DateTimeOffset messageTime,
+        string payloadType,
+        string payloadJson,
+        string reason,
+        DateTimeOffset rejectedAt) =>
+        new(channel, messageNumber, messageTime, payloadType, payloadJson, reason, rejectedAt);
 }

@@ -4,17 +4,17 @@ namespace Rockets.Infrastructure;
 
 public sealed class RocketEventRecord
 {
-    public required string Channel { get; set; }
+    public required string Channel { get; init; }
 
-    public int MessageNumber { get; set; }
+    public int MessageNumber { get; init; }
 
-    public DateTimeOffset MessageTime { get; set; }
+    public DateTimeOffset MessageTime { get; init; }
 
-    public DateTimeOffset BufferedAt { get; set; }
+    public DateTimeOffset BufferedAt { get; init; }
 
-    public required string PayloadType { get; set; }
+    public required string PayloadType { get; init; }
 
-    public required string PayloadJson { get; set; }
+    public required string PayloadJson { get; init; }
 
     public static RocketEventRecord FromDomain(RocketEvent @event, DateTimeOffset bufferedAt)
     {
@@ -37,7 +37,28 @@ public sealed class RocketEventRecord
 
 public sealed class RocketChannelCursorRecord
 {
-    public required string Channel { get; set; }
+    private RocketChannelCursorRecord(string channel, int nextMessageNumber)
+    {
+        Channel = channel;
+        NextMessageNumber = nextMessageNumber;
+    }
 
-    public int NextMessageNumber { get; set; }
+    public string Channel { get; }
+
+    public int NextMessageNumber { get; private set; }
+
+    public static RocketChannelCursorRecord Create(string channel, int nextMessageNumber) =>
+        new(channel, nextMessageNumber);
+
+    public void AdvanceTo(int nextMessageNumber)
+    {
+        if (nextMessageNumber <= NextMessageNumber)
+        {
+            throw new InvalidOperationException(
+                $"Cursor for channel {Channel} cannot move backwards from {NextMessageNumber} to {nextMessageNumber}; " +
+                "already-released messages would be re-applied.");
+        }
+
+        NextMessageNumber = nextMessageNumber;
+    }
 }

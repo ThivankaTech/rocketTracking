@@ -233,15 +233,11 @@ public sealed class SqlRocketEventSequencer : IRocketEventSequencer
     {
         if (cursor is null)
         {
-            _db.RocketChannelCursors.Add(new RocketChannelCursorRecord
-            {
-                Channel = channel,
-                NextMessageNumber = nextMessageNumber
-            });
+            _db.RocketChannelCursors.Add(RocketChannelCursorRecord.Create(channel, nextMessageNumber));
         }
         else
         {
-            cursor.NextMessageNumber = nextMessageNumber;
+            cursor.AdvanceTo(nextMessageNumber);
         }
     }
 }

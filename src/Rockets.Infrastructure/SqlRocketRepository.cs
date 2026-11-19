@@ -36,9 +36,7 @@ public sealed class SqlRocketRepository : IRocketRepository
 
         if (snapshot is null)
         {
-            snapshot = new RocketSnapshotRecord { Channel = rocket.ChannelId };
-            snapshot.CopyFrom(rocket);
-            _db.Rockets.Add(snapshot);
+            _db.Rockets.Add(RocketSnapshotRecord.Create(rocket));
         }
         else
         {
