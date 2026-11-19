@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Rockets.Api/Rockets.Api.csproj" />
+    <Project Path="src/Rockets.Application/Rockets.Application.csproj" />
+    <Project Path="src/Rockets.Domain/Rockets.Domain.csproj" />
+    <Project Path="src/Rockets.Infrastructure/Rockets.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Rockets.Api.Tests/Rockets.Api.Tests.csproj" />
+    <Project Path="tests/Rockets.Domain.Tests/Rockets.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

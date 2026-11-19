@@ -1,0 +1,25 @@
+meta {
+  name: 2 - Speed Increased
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/messages
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "metadata": {
+      "channel": "{{channel}}",
+      "messageNumber": 2,
+      "messageTime": "2024-01-01T12:00:05+00:00",
+      "messageType": "RocketSpeedIncreased"
+    },
+    "message": {
+      "by": 3000
+    }
+  }
+}

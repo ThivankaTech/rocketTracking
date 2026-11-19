@@ -1,0 +1,27 @@
+meta {
+  name: Out Of Order - 3. Then Send #1 (Launch, full cascade)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/messages
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "metadata": {
+      "channel": "bruno-out-of-order-1",
+      "messageNumber": 1,
+      "messageTime": "2024-01-01T12:00:00+00:00",
+      "messageType": "RocketLaunched"
+    },
+    "message": {
+      "type": "Falcon-9",
+      "launchSpeed": 500,
+      "mission": "ARTEMIS"
+    }
+  }
+}

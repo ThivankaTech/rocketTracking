@@ -1,0 +1,27 @@
+meta {
+  name: 1 - Rocket Launched
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/messages
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "metadata": {
+      "channel": "{{channel}}",
+      "messageNumber": 1,
+      "messageTime": "2024-01-01T12:00:00+00:00",
+      "messageType": "RocketLaunched"
+    },
+    "message": {
+      "type": "Falcon-9",
+      "launchSpeed": 500,
+      "mission": "ARTEMIS"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+meta {
+  name: 4 - Mission Changed
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/messages
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "metadata": {
+      "channel": "{{channel}}",
+      "messageNumber": 4,
+      "messageTime": "2024-01-01T12:00:15+00:00",
+      "messageType": "RocketMissionChanged"
+    },
+    "message": {
+      "newMission": "SHUTTLE_MIR"
+    }
+  }
+}

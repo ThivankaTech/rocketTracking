@@ -1,0 +1,25 @@
+meta {
+  name: Out Of Order - 1. Send #3 First
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/messages
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "metadata": {
+      "channel": "bruno-out-of-order-1",
+      "messageNumber": 3,
+      "messageTime": "2024-01-01T12:00:10+00:00",
+      "messageType": "RocketMissionChanged"
+    },
+    "message": {
+      "newMission": "SHUTTLE_MIR"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+meta {
+  name: 5 - Rocket Exploded
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/messages
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "metadata": {
+      "channel": "{{channel}}",
+      "messageNumber": 5,
+      "messageTime": "2024-01-01T12:00:20+00:00",
+      "messageType": "RocketExploded"
+    },
+    "message": {
+      "reason": "PRESSURE_VESSEL_FAILURE"
+    }
+  }
+}

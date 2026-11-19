@@ -1,0 +1,23 @@
+meta {
+  name: Unknown Message Type (400)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/messages
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "metadata": {
+      "channel": "bruno-bad-type",
+      "messageNumber": 1,
+      "messageTime": "2024-01-01T12:00:00+00:00",
+      "messageType": "NotARealMessageType"
+    },
+    "message": {}
+  }
+}
