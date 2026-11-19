@@ -49,7 +49,7 @@ If message `#2` never arrives, everything from `#3` onward would just sit there 
 
 ### What if the launch message itself is the one that's missing
 
-A rocket doesn't actually need `RocketLaunched` to exist. `Type`/`Mission`/`LaunchSpeed` are nullable, and they just stay `null` (`HasLaunchDetails: false`) until a launch message shows up — this covers a rocket exploding before its launch message ever arrives, which is a real case someone pointed out to me while building this. If `RocketLaunched` arrives within the grace period, it's applied normally like any other message. If it only turns up after `GapTimeout` has already passed, it's treated the same as any other late message — the sequencer drops it, and the rocket is left permanently without launch details rather than trying to backfill them in after the fact.
+A rocket doesn't actually need `RocketLaunched` to exist. `Type`/`Mission`/`LaunchSpeed` are nullable, and they just stay `null` (`HasLaunchDetails: false`) until a launch message shows up — this covers a rocket exploding before its launch message ever arrives, which is a real case I accounted for while building this. If `RocketLaunched` arrives within the grace period, it's applied normally like any other message. If it only turns up after `GapTimeout` has already passed, it's treated the same as any other late message — the sequencer drops it, and the rocket is left permanently without launch details rather than trying to backfill them in after the fact.
 
 ### Keeping it from falling over
 
@@ -97,4 +97,3 @@ dotnet test Rockets.slnx
 
 - **`EnsureCreated` instead of EF migrations.** Fine for this exercise, but a real system needs migrations so the schema can evolve without dropping the database.
 - **`GetStaleChannelsWithBacklogAsync` pulls every buffered event into memory** to group them by channel in C#. I did it that way because it's easy to read, and at this scale it doesn't matter — but with a lot of data, that grouping should happen in SQL instead.
-- **A channel that will never launch** (it has a backlog, but `RocketLaunched` genuinely isn't coming) still gets checked by the sweep on every tick, forever. That's not the "message stuck forever" bug — the message itself is fine, just permanently unresolvable — but it is wasted work that I noticed while testing and didn't go back and fix.
